@@ -29,6 +29,8 @@ class AP_Node {
 
         void Insert_Associated_UE(int uid, int dst, double power);
 
+        int Associated_UE_Num();
+
         void Remove_Associated_UE(int uid); // remove an UE from the AP
 
         void Clear_Associated_UE(); // remove all UE from the AP

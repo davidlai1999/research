@@ -39,6 +39,10 @@ void AP_Node::Insert_Associated_UE(int uid, int dst, double power){
     accociated_UEs.insert(accociated_UEs.begin()+dst, {uid, power});
 }
 
+int AP_Node::Associated_UE_Num() {
+    return accociated_UEs.size();
+}
+
 void AP_Node::Remove_Associated_UE(int uid){
     for (int i = 0 ; i < accociated_UEs.size() ; i++) {
         if (accociated_UEs[i].first == uid)
@@ -47,7 +51,7 @@ void AP_Node::Remove_Associated_UE(int uid){
 }
 
 void AP_Node::Clear_Associated_UE() {
-    accociated_UEs.swap(std::vector<std::pair<int, double>());
+    ;//accociated_UEs.clear();
 }
 
 std::vector<int> AP_Node::Get_UEs(void){
