@@ -8,10 +8,10 @@
 #include "AP_Node.h"
 
 using namespace ns3;
-AP_Node::AP_Node(int id,Vector in_pos, Ptr<Node> _node){
+AP_Node::AP_Node(int id, double max_power, Vector in_pos, Ptr<Node> _node){
     Node_ID = id;
     pos = in_pos;
-    residual_power = VLC_Max_Power;
+    residual_power = max_power;
     node = _node;
 }
 
@@ -51,7 +51,14 @@ void AP_Node::Remove_Associated_UE(int uid){
 }
 
 void AP_Node::Clear_Associated_UE() {
-    ;//accociated_UEs.clear();
+    while(accociated_UEs.size() != 0) {
+        accociated_UEs.erase(accociated_UEs.begin());
+    }
+}
+
+double AP_Node::Get_Prev_UE_Power() {
+    int last_ue_index = accociated_UEs.size() - 1;
+    return (last_ue_index == -1) ? 0 : accociated_UEs[last_ue_index].second;
 }
 
 std::vector<int> AP_Node::Get_UEs(void){

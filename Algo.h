@@ -43,7 +43,9 @@ int find_Best_VLC_Channel_Gain(int ue_id);
 
 void set_UE_Associated_AP_Based_On_Channel();
 
-void Update_AP_power_allocation(int ap_id);
+void Update_VLC_AP_power_allocation(int ap_id);
+
+void Update_RF_AP_power_allocation(int ap_id);
 
 void Update_All_AP_power_allocation();
 

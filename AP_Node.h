@@ -15,7 +15,7 @@ using namespace ns3;
 class AP_Node {
 
     public :
-        AP_Node(int id,Vector pos, Ptr<Node> node); //constructor
+        AP_Node(int id, double max_power, Vector pos, Ptr<Node> node); //constructor
 
         void Set_AP_ID(int id); //set ap id
 
@@ -34,6 +34,8 @@ class AP_Node {
         void Remove_Associated_UE(int uid); // remove an UE from the AP
 
         void Clear_Associated_UE(); // remove all UE from the AP
+
+        double Get_Prev_UE_Power();
 
         std::vector<int> Get_UEs(void); // get all the UEs under an AP
 

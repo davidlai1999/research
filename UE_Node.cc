@@ -13,7 +13,8 @@ UE_Node::UE_Node(int id, double required_rate, Ptr<Node> _node) {
     required_datarate = required_rate;
     associated_AP = -1;
     node = _node;
-    modulation_mod = {0, 0, 0, 1};
+    mode_index = -1;
+    modulation_mod = {0, 0, 0, 0};
 }
 
 void UE_Node::Set_UE_ID(int id){
@@ -61,6 +62,14 @@ double UE_Node::Get_Required_DataRate(void){
     return required_datarate;
 }
 
+void UE_Node::Set_Achievable_DataRate(double data_rate_in_Mbps) {
+    achievable_datarate = data_rate_in_Mbps;
+}
+
+double UE_Node::Get_Achievable_DataRate(void) {
+    return achievable_datarate;
+}
+
 void UE_Node::Set_Associated_AP(int associated_AP_index){
     associated_AP = associated_AP_index;
 }
@@ -72,6 +81,15 @@ int UE_Node::Get_Associated_AP(void) const{
 Ptr<Node> UE_Node::Get_Node(void){
     return node;
 }
+
+void UE_Node::Set_Mode_Index(int index) {
+    mode_index = index;
+}
+
+int UE_Node::Get_Mode_Index() {
+    return mode_index;
+}
+
 
 void UE_Node::Set_Modulation_Mod(std::vector<int> mode){
     modulation_mod = mode;

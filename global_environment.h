@@ -15,7 +15,7 @@ const double pi = 3.14159265359;
 /////////        Simulation Constants          /////////
 ////////////////////////////////////////////////////////
 //simulation time, unit: seconds
-const int simulation_time = 1.0; // 300
+const int simulation_time = 300; // 300
 
 //time between each execution of the algorithm, unit: seconds
 const double delta_t = 0.05;
@@ -68,7 +68,7 @@ const int VLC_AP_Num = 16;
 const int AP_Num = RF_AP_Num + VLC_AP_Num;
 
 // - UE number
-const int UE_Num = 16;
+const int UE_Num = 30;
 
 // VLC AP y axis start
 const double VLC_AP_Y = 3.75;
@@ -104,13 +104,16 @@ const double RF_AP_Power = 0.05;
 const int RF_AP_Bandwidth = 10;
 
 // - power spectral density = -75dBm/MHz  ~=  3.16e-11 A^2/MHz
-const double Nw = 3.1622776602e-11;
+const double RF_AWGN_spectral_density = 3.1622776602e-11;
 
 // reference distance for free-space path loss function
 const double d_ref = 5.0;
 
 // central carrier frequency
 const double central_freq = 5.0e9;
+
+// - Max power
+const double RF_Max_Power = 10.0;
 
 ////////////////////////////////////////////////////////
 /////////          Each VLC AP                  ////////
@@ -135,10 +138,10 @@ const double kappa = 0.53 ;
 
 const int reuse_factor = 2; // RB id range from 0 to g_frequency_reuse_factor-1
 
-const double bandwidth_per_rb = VLC_AP_Bandwidth / reuse_factor;
+const double bandwidth_per_cell = VLC_AP_Bandwidth / reuse_factor;
 
 // - AWGN power spectral density
-const double AWGN_Power_spectral_density = 1e-16;
+const double VLC_AWGN_spectral_density = 1e-16;
 
 ////////////////////////////////////////////////////////
 /////////          Each UE                      ////////
