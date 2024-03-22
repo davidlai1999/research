@@ -85,4 +85,6 @@ int main (int argc, char *argv[])
 
   //Output();
   Simulator::Destroy ();
+
+  print_analysis_data();
 }

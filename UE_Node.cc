@@ -11,6 +11,7 @@ using namespace ns3;
 UE_Node::UE_Node(int id, double required_rate, Ptr<Node> _node) {
     Node_ID = id;
     required_datarate = required_rate;
+    achievable_datarate = 0.0;
     associated_AP = -1;
     node = _node;
     mode_index = -1;

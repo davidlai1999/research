@@ -58,7 +58,7 @@ void AP_Node::Clear_Associated_UE() {
 
 double AP_Node::Get_Prev_UE_Power() {
     int last_ue_index = accociated_UEs.size() - 1;
-    return (last_ue_index == -1) ? 0 : accociated_UEs[last_ue_index].second;
+    return (last_ue_index == -1) ? 0.0 : accociated_UEs[last_ue_index].second;
 }
 
 std::vector<int> AP_Node::Get_UEs(void){
@@ -93,7 +93,7 @@ void AP_Node::Set_UE_Power(int uid, double required_power){
 double AP_Node::Get_UE_Power(int uid){
     for (int i = 0 ; i < accociated_UEs.size() ; i++) {
         if (accociated_UEs[i].first == uid)
-            return accociated_UEs[uid].second;
+            return accociated_UEs[i].second;
     }
 }
 

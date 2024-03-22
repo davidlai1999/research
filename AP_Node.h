@@ -52,12 +52,14 @@ class AP_Node {
         double Get_Residual_Power(void); // get the residual power of the AP
 
         void Set_Residual_Power(double Power); // set the residual power of the AP
+
     private :
         int Node_ID;                                             //ap id
         Vector pos;                                              //ap position
         Ptr<Node> node;                                          //ns3 node
+
         double residual_power;                                   //residual power
-        std::vector<std::pair<int, double>> accociated_UEs; //list of the associated UEs and their power
+        std::vector<std::pair<int, double>> accociated_UEs;      //list of the associated UEs and their power
 };
 #endif
 

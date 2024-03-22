@@ -21,7 +21,7 @@ void Initialize_UE_Node_list(NodeContainer &UE_Nodes);
 
 void Initialize_AP_Node_list(NodeContainer & AP_Nodes);
 
-void Update_UE_Condiction(std::vector<UE_Node> & UElist);
+void Update_UE_Condiction();
 
 double set_BER_Required_SINR(const int& number_of_layer);
 
@@ -54,5 +54,9 @@ double generate_VHO_overhead();
 double generate_HHO_overhead();
 
 void Do_algorithm();
+
+void update_analysis_data();
+
+void print_analysis_data();
 
 #endif

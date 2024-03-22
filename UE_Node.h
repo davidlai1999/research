@@ -65,10 +65,12 @@ class UE_Node {
         Vector pos;                                  //user position
         Ptr<Node> node;                              //ns3 node
         double required_datarate;                    //required data rate
-        double achievable_datarate;                  //achievable data rate
-        int associated_AP;                           //associated AP of the UE
         int mode_index;
         std::vector<int> modulation_mod;             //modulation mod of the UE
+
+
+        double achievable_datarate;                  //achievable data rate
+        int associated_AP;                           //associated AP of the UE
 };
 #endif
 

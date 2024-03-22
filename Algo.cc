@@ -28,6 +28,7 @@ std::vector<double> Dwell_timer (UE_Num, 0.0);
 
 //timer of handover, first is VHO, second is HH0
 std::vector<std::pair<double, double>> Handover_timer (UE_Num, {0.0, 0.0});
+std::vector<std::pair<double, double>> Record_handover_time (UE_Num, {0.0, 0.0});
 
 // mode 0 : UE is normal, mode 1 : UE redundant, mode 2 : UE dwell time, mode 3 : during handover
 std::vector<int> UE_timer_mode (UE_Num,0);
@@ -58,7 +59,23 @@ std::vector<double> mode_rate_table;
 //lists to store the APs and the UEs
 std::vector<AP_Node> APlist;
 std::vector<UE_Node> UElist;
-std::vector<int> Redundant_UElist;
+std::vector<double> UE_average_rate (UE_Num,0.0);// average data rate of each UE
+
+// data used for analysis
+double simulation_steps = simulation_time / delta_t;
+int UE_connect_to_AP = 0;        // The number of UE connect to AP
+int Redundant_UE_count = 0;      // The number of UE redundant
+int UE_connect_to_RF_AP = 0;     // The number of UE connect to RF AP
+int UE_connect_to_VLC_AP = 0;    // The number of UE connect to VLC AP
+int RFtoVLC = 0;                 // handover count from RF to VLC
+int VLCtoRF = 0;                 // handover count from VLC to RF
+int VLCtoVLC = 0;                // handover count from VLC to VLC
+int RFtoRF = 0;                  // handover count from RF to RF
+int VHO_count = 0;               // vertical handover count
+int HHO_count = 0;               // horizontal handover count
+double total_handover_delay = 0; // total time that is consumed by the handover
+double total_HHO_delay = 0;      // total time that is consumed by the HHO
+double total_VHO_delay = 0;      // total time that is consumed by the VHO
 
 bool compare_channel_gain(const UE_Node& node1, const UE_Node& node2)
 {
@@ -101,7 +118,7 @@ void Initialize_AP_Node_list(NodeContainer & AP_Nodes){
     frequency[3]=frequency[5]=frequency[11]=frequency[13]=3;
 }
 
-void Update_UE_Condiction(std::vector<UE_Node> & UElist) {
+void Update_UE_Condiction() {
     for (int i = 0 ; i < UElist.size() ; i++)
         UElist[i].UpdateCondiction();
 }
@@ -240,6 +257,28 @@ double get_VLC_minimum_required_power(const int ap_id, const int ue_id, std::vec
 int select_modulation_mode_base_on_residual_power(int ap_id, int ue_id, double residual_power, int l, int r, double sum_prev_ue_power) {
     if (r - l  == 1) {
         double l_power = get_VLC_minimum_required_power(ap_id, ue_id, mode_table[l], sum_prev_ue_power);
+        return (l_power < residual_power) ? l : -1;
+    }
+
+    if (l > r)
+        return -1;
+
+    int mid = (l + r) / 2 ;
+    if (get_VLC_minimum_required_power(ap_id, ue_id, mode_table[mid], sum_prev_ue_power) > residual_power) {
+        return select_modulation_mode_base_on_residual_power(ap_id, ue_id, residual_power, l, mid, sum_prev_ue_power);
+    }
+    else if (residual_power > get_VLC_minimum_required_power(ap_id, ue_id, mode_table[mid], sum_prev_ue_power)){
+        return select_modulation_mode_base_on_residual_power(ap_id, ue_id, residual_power, mid, r, sum_prev_ue_power);
+    }
+    else {
+        return mid;
+    }
+
+}
+
+/*int select_modulation_mode_base_on_residual_power(int ap_id, int ue_id, double residual_power, int l, int r, double sum_prev_ue_power) {
+    if (r - l  == 1) {
+        double l_power = get_VLC_minimum_required_power(ap_id, ue_id, mode_table[l], sum_prev_ue_power);
         double r_power = get_VLC_minimum_required_power(ap_id, ue_id, mode_table[r], sum_prev_ue_power);
         return (r_power < residual_power) ? r : ( l_power < residual_power) ? l : -1;
     }
@@ -261,7 +300,7 @@ int select_modulation_mode_base_on_residual_power(int ap_id, int ue_id, double r
         return mid;
     }
 
-}
+}*/
 
 double get_RF_minimum_required_power(const int ap_id, const int ue_id, const double sum_prev_ue_power) {
     double channel_gain = std::pow(Channel_Gain_Matrix[ap_id][ue_id], 2);
@@ -295,10 +334,10 @@ std::vector<double> power_allocation_after_handover(int ap_id, int ue_id) {
     if (APlist[ap_id].Get_Residual_Power() <= 0) return {0.0, APlist[ap_id].Get_Residual_Power()};
     std::vector<int> UElist_of_AP = APlist[ap_id].Get_UEs();
 
-    double sum = 0.0, prev = 0.0, required_rate = 0.0;
+    double sum = 0.0, prev = 0.0, required_power = 0.0;
     int bigger_channel_ue = -1;
     for (int i = 0 ; i < UElist_of_AP.size() ; i++) {
-        if (Channel_Gain_Matrix[ap_id][UElist_of_AP[i]] <= Channel_Gain_Matrix[ap_id][ue_id]) {
+        if (Channel_Gain_Matrix[ap_id][UElist_of_AP[i]] >= Channel_Gain_Matrix[ap_id][ue_id]) {
             prev = APlist[ap_id].Get_UE_Power(UElist_of_AP[i]);
             sum = sum + prev;
         }
@@ -309,35 +348,35 @@ std::vector<double> power_allocation_after_handover(int ap_id, int ue_id) {
     }
 
     if (ap_id < RF_AP_Num)
-        required_rate = get_RF_minimum_required_power(ap_id, ue_id, sum);
+        required_power = get_RF_minimum_required_power(ap_id, ue_id, sum);
     else
-        required_rate = get_VLC_minimum_required_power(ap_id, ue_id, sum);
+        required_power = get_VLC_minimum_required_power(ap_id, ue_id, sum);
 
-    required_rate = (prev > required_rate) ? prev : required_rate;
-    double target_required_rate = required_rate;
-    sum = sum + required_rate;
-    prev = required_rate;
+    required_power = (prev > required_power) ? prev : required_power;
+    double target_required_power = required_power;
+    sum = sum + required_power;
+    prev = required_power;
 
     if (bigger_channel_ue != -1) {
         for (int i = bigger_channel_ue ; i < UElist_of_AP.size() ; i++) {
             if (ap_id < RF_AP_Num) {
-                required_rate = get_RF_minimum_required_power(ap_id, ue_id, sum);
-                required_rate = (prev > required_rate) ? prev : required_rate;
-                sum = sum + required_rate;
-                prev = required_rate;
+                required_power = get_RF_minimum_required_power(ap_id, UElist_of_AP[i], sum);
+                required_power = (prev > required_power) ? prev : required_power;
+                sum = sum + required_power;
+                prev = required_power;
             }
             else {
-                required_rate = get_VLC_minimum_required_power(ap_id, ue_id, sum);
-                required_rate = (prev > required_rate) ? prev : required_rate;
-                sum = sum + required_rate;
-                prev = required_rate;
+                required_power = get_VLC_minimum_required_power(ap_id, UElist_of_AP[i], sum);
+                required_power = (prev > required_power) ? prev : required_power;
+                sum = sum + required_power;
+                prev = required_power;
             }
 
         }
     }
 
     double residual_power = VLC_Max_Power - sum;
-    return {target_required_rate, residual_power};
+    return {target_required_power, residual_power};
 }
 
 int find_Best_VLC_Channel_Gain(int ue_id) {
@@ -392,9 +431,11 @@ void Update_VLC_AP_power_allocation(int ap_id) {
     for (; curr < tmp_UElist.size() ; curr++) {
         int ue_id = tmp_UElist[curr].GetID();
 
+        if (Channel_Gain_Matrix[ap_id][ue_id] == 0)
+            break;
+
         required_power = get_VLC_minimum_required_power(ap_id, ue_id, sum);
         required_power = (prev > required_power) ? prev : required_power;
-
         sum = sum + required_power;
 
         if (sum > VLC_Max_Power) {
@@ -422,7 +463,7 @@ void Update_VLC_AP_power_allocation(int ap_id) {
                     sum = sum + required_power;
                     UElist[ue_id].Set_Achievable_DataRate(mode_rate_table[mode]);
                     APlist[ap_id].Add_Associated_UE(ue_id, required_power);
-                    curr = curr + 1;
+                    curr += 1;
                     break;
                 }
             }
@@ -434,7 +475,7 @@ void Update_VLC_AP_power_allocation(int ap_id) {
         }
     }
 
-    for (;curr < tmp_UElist.size() ; curr++) {
+    for (; curr < tmp_UElist.size() ; curr++) {
         int ue_id = tmp_UElist[curr].GetID();
         UElist[ue_id].Set_Achievable_DataRate(0.0);
     }
@@ -479,7 +520,6 @@ void Update_RF_AP_power_allocation(int ap_id) {
         }
         else {
             UElist[ue_id].Set_Achievable_DataRate(UElist[ue_id].Get_Required_DataRate());
-
             APlist[ap_id].Add_Associated_UE(ue_id, required_power);
             prev = required_power;
         }
@@ -517,29 +557,27 @@ double generate_HHO_overhead() {
 
 void Do_algorithm(){
     // 更新所有 UE 的位置與速度
-    Update_UE_Condiction(UElist);
+
+    Update_UE_Condiction();
 
     /*UElist[0].SetPosition(-3.75, 3.75);
-    UElist[1].SetPosition(-3.2, 3.2);
-    UElist[2].SetPosition(-3.0, 3.0);
-    UElist[3].SetPosition(-2.7, 2.7);*/
+    UElist[0].Set_Required_DataRate(75.0);
+    UElist[1].SetPosition(-3.6, 3.6);
+    UElist[1].Set_Required_DataRate(75.0);
+    UElist[2].SetPosition(-3.45, 3.45);
+    UElist[2].Set_Required_DataRate(75);
+    UElist[3].SetPosition(-3.3, 3.3);
+    UElist[3].Set_Required_DataRate(75.0);
+    Set_UE_default_modulation_mode();*/
 
     // 算所有 UE 的 Channel gain
     Calculate_Channel_Gain_Matrix(APlist, UElist, Channel_Gain_Matrix);
-    /*for (int i = 0 ; i < AP_Num ; i++) {
-        std::cout << Channel_Gain_Matrix[i][0] << std::endl;
-    }*/
 
+    // std::cout << bandwidth_per_cell * VLC_AWGN_spectral_density << std::endl;
 
-    /*int mode = select_modulation_mode(UElist[0].Get_Required_DataRate(), 0, mode_rate_table.size());
-    UElist[0].Set_Modulation_Mod(mode_table[mode]);
-    mode = select_modulation_mode(UElist[1].Get_Required_DataRate(), 0, mode_rate_table.size());
-    UElist[1].Set_Modulation_Mod(mode_table[mode]);
-    mode = select_modulation_mode(UElist[2].Get_Required_DataRate(), 0, mode_rate_table.size());
-    UElist[2].Set_Modulation_Mod(mode_table[mode]);
-    mode = select_modulation_mode(UElist[3].Get_Required_DataRate(), 0, mode_rate_table.size());
-    UElist[3].Set_Modulation_Mod(mode_table[mode]);
-    std::cout << UElist[0].Get_Required_DataRate()<< std::endl;
+    // std::cout << RF_AP_Bandwidth * RF_AWGN_spectral_density << std::endl;
+
+    /*std::cout << UElist[0].Get_Required_DataRate()<< std::endl;
     std::vector<int> v1 = UElist[0].Get_Modulation_Mod();
     std::cout << v1[0] << v1[1] << v1[2] << v1[3] << std::endl;
     std::cout << UElist[1].Get_Required_DataRate()<< std::endl;
@@ -552,32 +590,28 @@ void Do_algorithm(){
     std::vector<int> v4 = UElist[3].Get_Modulation_Mod();
     std::cout << v4[0] << v4[1] << v4[2] << v4[3] << std::endl;
 
-    // std::cout << APlist[4].GetPosition().x << APlist[4].GetPosition().y << std::endl;
+    UElist[0].Set_Associated_AP(4);
+    APlist[4].Add_Associated_UE(0, 0.0);
+    UElist[1].Set_Associated_AP(4);
+    APlist[4].Add_Associated_UE(1, 0.0);
+    UElist[2].Set_Associated_AP(4);
+    APlist[4].Add_Associated_UE(2, 0.0);
+    //UElist[3].Set_Associated_AP(4);
+    //APlist[4].Add_Associated_UE(3, 0.0);
 
-    double prev = get_VLC_minimum_required_power(4, 0, 0.0), sum = 0.0;
-    std::cout << Channel_Gain_Matrix[4][0] << " " << prev << std::endl;
-    //std::cout << get_channel(APlist[4], UElist[0]) << std::endl;
-    sum = sum + prev;
-    prev = get_VLC_minimum_required_power(4, 1, sum);
-    std::cout << Channel_Gain_Matrix[4][1] << " " << prev << std::endl;
-    sum = sum + prev;
-    prev = get_VLC_minimum_required_power(4, 2, sum);
-    std::cout << Channel_Gain_Matrix[4][2] << " " << prev << std::endl;
-    sum = sum + prev;
-    prev = get_VLC_minimum_required_power(4, 3, sum);
-    std::cout << Channel_Gain_Matrix[4][3] << " " << prev << std::endl;
-    sum = sum + prev;
-    std::cout << sum << std::endl;
-    if (sum >= VLC_Max_Power) {
-        sum = sum - prev;
-        std::cout << sum << std::endl;
-        int mode = select_modulation_mode_base_on_residual_power(4, 3, VLC_Max_Power-sum, 0, mode_table.size()-1, sum);
+    Update_VLC_AP_power_allocation(4);
 
-        prev = get_VLC_minimum_required_power(4, 3, mode_table[mode], sum);
-        std::cout << VLC_Max_Power-sum << std::endl;
-        std::cout << mode << " " << prev << std::endl;
+    std::vector<int> AP4_UE_list = APlist[4].Get_UEs();
+    for (int i = 0 ; i < AP4_UE_list.size() ; i++) {
+        std::cout << "UE id " << AP4_UE_list[i] <<" " << Channel_Gain_Matrix[4][AP4_UE_list[i]] << " " << APlist[4].Get_UE_Power(AP4_UE_list[i]) << std::endl;
     }
-    std::cout << "========================" << std::endl;*/
+
+    std::cout << "UE id 0 " << Channel_Gain_Matrix[4][0] << " " << UElist[0].Get_Achievable_DataRate() << std::endl;
+    std::cout << "UE id 1 " << Channel_Gain_Matrix[4][1] << " " << UElist[1].Get_Achievable_DataRate() << std::endl;
+    std::cout << "UE id 2 " << Channel_Gain_Matrix[4][2] << " " << UElist[2].Get_Achievable_DataRate() << std::endl;
+    std::cout << "UE id 3 " << Channel_Gain_Matrix[4][3] << " " << UElist[3].Get_Achievable_DataRate() << std::endl;
+    std::cout << "UE residual power " << APlist[4].Get_Residual_Power() << std::endl;
+    std::cout << "UE residual power " << power_allocation_after_handover(4, 3)[1] << std::endl;*/
 
     if(Simulator::Now().GetSeconds() == 0) { // 初始化環境，UE 根據 channel gain 由大到小排序，採 SSS
         Set_UE_default_modulation_mode();
@@ -601,6 +635,7 @@ void Do_algorithm(){
                 double required_power = get_RF_minimum_required_power(ap_id, ue_id, RF_Max_Power-residual_power);
                 required_power = (prev > required_power) ? prev : required_power;
 
+                std::cout << required_power << " " << residual_power << std::endl;
                 // determine served by WiFi AP or not
                 if (required_power <= residual_power) {
                     residual_power -= required_power;
@@ -609,7 +644,6 @@ void Do_algorithm(){
 
                     UElist[ue_id].Set_Achievable_DataRate(UElist[ue_id].Get_Required_DataRate());
                 } else {
-                    std::cout << required_power << " " << residual_power << std::endl;
                     UElist[ue_id].Set_Associated_AP(-1);
                     UElist[ue_id].Set_Achievable_DataRate(0.0);
                     UE_timer_mode[ue_id] = 1;
@@ -650,6 +684,8 @@ void Do_algorithm(){
                     UElist[i].Set_Achievable_DataRate(0.0);
                     Handover_timer[i].first = generate_VHO_overhead();
                     Handover_timer[i].second = Handover_timer[i].first;
+                    Record_handover_time[i].first = Handover_timer[i].first;
+                    Record_handover_time[i].second = Handover_timer[i].second;
 
                     int host_ap_id = UElist[i].Get_Associated_AP();
                     APlist[host_ap_id].Remove_Associated_UE(i);
@@ -659,24 +695,12 @@ void Do_algorithm(){
                     UE_timer_mode[i] = 3;
                     Handover_timer[i].first = generate_VHO_overhead();
                     Handover_timer[i].second = std::min(Handover_timer[i].first, generate_HHO_overhead());
+                    Record_handover_time[i].first = Handover_timer[i].first;
+                    Record_handover_time[i].second = Handover_timer[i].second;
                 }
                 else if (UElist[i].Get_Achievable_DataRate() < UElist[i].Get_Required_DataRate()) {
                     UE_timer_mode[i] = 2;
                     Dwell_timer[i] = time_TTT;
-                }
-                else if (Channel_Gain_Matrix[UElist[i].Get_Associated_AP()][i] <= 0) {
-                    UE_timer_mode[i] = 3;
-                    UElist[i].Set_Achievable_DataRate(0.0);
-                    Handover_timer[i].first = generate_VHO_overhead();
-                    Handover_timer[i].second = std::min(Handover_timer[i].first, generate_HHO_overhead());
-
-                    int host_ap_id = UElist[i].Get_Associated_AP();
-                    APlist[host_ap_id].Remove_Associated_UE(i);
-
-                    if (host_ap_id < RF_AP_Num)
-                        Update_RF_AP_power_allocation(host_ap_id);
-                    else
-                        Update_VLC_AP_power_allocation(host_ap_id);
                 }
             }
             else if (UE_timer_mode[i] == 1) {
@@ -734,6 +758,8 @@ void Do_algorithm(){
                     Dwell_timer[i] = 0.0;
                     Handover_timer[i].first = generate_VHO_overhead();
                     Handover_timer[i].second = Handover_timer[i].first;
+                    Record_handover_time[i].first = Handover_timer[i].first;
+                    Record_handover_time[i].second = Handover_timer[i].second;
 
                     int host_ap_id = UElist[i].Get_Associated_AP();
                     APlist[host_ap_id].Remove_Associated_UE(i);
@@ -748,11 +774,13 @@ void Do_algorithm(){
                         UE_timer_mode[i] = 0;
                         Dwell_timer[i] = 0;
                     }
-                    else if (UElist[i].Get_Achievable_DataRate() == 0) { // dont get any power
+                    else if (UElist[i].Get_Achievable_DataRate() == 0) { // don't get any power
                         UE_timer_mode[i] = 3;
                         Dwell_timer[i] = 0;
                         Handover_timer[i].first = generate_VHO_overhead();
                         Handover_timer[i].second = std::min(Handover_timer[i].first, generate_HHO_overhead());
+                        Record_handover_time[i].first = Handover_timer[i].first;
+                        Record_handover_time[i].second = Handover_timer[i].second;
                     }
                     else { // still get some power, but cant get required power
                         Dwell_timer[i] -= delta_t;
@@ -768,14 +796,18 @@ void Do_algorithm(){
                         Dwell_timer[i] = 0;
                         Handover_timer[i].first = generate_VHO_overhead();
                         Handover_timer[i].second = std::min(Handover_timer[i].first, generate_HHO_overhead());
+                        Record_handover_time[i].first = Handover_timer[i].first;
+                        Record_handover_time[i].second = Handover_timer[i].second;
 
                         int host_ap_id = UElist[i].Get_Associated_AP();
-                        APlist[host_ap_id].Remove_Associated_UE(i);
+                        if (APlist[host_ap_id].Find_UE(i) == true) {// still get power from AP
+                            APlist[host_ap_id].Remove_Associated_UE(i);
 
-                        if (host_ap_id < RF_AP_Num)
-                            Update_RF_AP_power_allocation(host_ap_id);
-                        else
-                            Update_VLC_AP_power_allocation(host_ap_id);
+                            if (host_ap_id < RF_AP_Num)
+                                Update_RF_AP_power_allocation(host_ap_id);
+                            else
+                                Update_VLC_AP_power_allocation(host_ap_id);
+                        }
                     }
                 }
             }
@@ -804,6 +836,8 @@ void Do_algorithm(){
                     if (AP_list.size() == 0) { // dont have ap to handover, release ap resource
                         UElist[i].Set_Associated_AP(-1);
                         UE_timer_mode[i] = 1;
+                        Record_handover_time[i].first = 0.0;
+                        Record_handover_time[i].second = 0.0;
                     } else {
                         sort(AP_list.begin(), AP_list.end(), compare_residual_power);
 
@@ -830,6 +864,32 @@ void Do_algorithm(){
                             Update_VLC_AP_power_allocation(ap_id);
 
                         UE_timer_mode[i] = 0;
+
+                        if (host_ap_id == ap_id)
+                            ;
+                        else if (host_ap_id < RF_AP_Num && ap_id < RF_AP_Num) {
+                            RFtoRF += 1;
+                            HHO_count += 1;
+                            total_HHO_delay += Record_handover_time[i].second;
+                        }
+                        else if (host_ap_id >= RF_AP_Num && ap_id < RF_AP_Num) {
+                            VLCtoRF += 1;
+                            VHO_count += 1;
+                            total_VHO_delay += Record_handover_time[i].first;
+                        }
+                        else if (host_ap_id >= RF_AP_Num && ap_id >= RF_AP_Num) {
+                            VLCtoVLC +=1;
+                            HHO_count += 1;
+                            total_HHO_delay += Record_handover_time[i].second;
+                        }
+                        else {
+                            RFtoVLC +=1;
+                            VHO_count += 1;
+                            total_VHO_delay += Record_handover_time[i].first;
+                        }
+
+                        Record_handover_time[i].first = 0.0;
+                        Record_handover_time[i].second = 0.0;
                     }
 
                 }
@@ -837,9 +897,8 @@ void Do_algorithm(){
                     int host_ap_id = UElist[i].Get_Associated_AP();
 
                     int ap_id = 0, AP_num = 0;
-                    if (host_ap_id < RF_AP_Num) {// host_ap is RF AP
+                    if (host_ap_id < RF_AP_Num) // host_ap is RF AP
                         ap_id = 0, AP_num = RF_AP_Num;
-                    }
                     else
                         ap_id = RF_AP_Num, AP_num = AP_Num;
 
@@ -883,6 +942,18 @@ void Do_algorithm(){
                         Handover_timer[i].first = 0.0;
                         Handover_timer[i].second = 0.0;
                         UE_timer_mode[i] = 0;
+
+                        if (host_ap_id == ap_id)
+                            ;
+                        else if (host_ap_id < RF_AP_Num && ap_id < RF_AP_Num)
+                            RFtoRF += 1;
+                        else if (host_ap_id >= RF_AP_Num && ap_id >= RF_AP_Num)
+                            VLCtoVLC +=1;
+
+                        HHO_count += 1;
+                        total_HHO_delay += Record_handover_time[i].second;
+                        Record_handover_time[i].first = 0.0;
+                        Record_handover_time[i].second = 0.0;
                     }
                 }
                 else if (Handover_timer[i].first > 0 && Handover_timer[i].second > 0) { // still during handover
@@ -894,22 +965,62 @@ void Do_algorithm(){
         }
     }
 
-    total = 0;
+    update_analysis_data();
 
-    for (int i = 0 ; i < APlist.size() ; i++) {
-        if (APlist[i].Associated_UE_Num() > 0)
-            total += APlist[i].Associated_UE_Num();
-
-    }
-
-    for (int i = 0 ; i < UElist.size() ; i++) {
-        std::cout << "user: "<<  i << " mode: " << UE_timer_mode[i] << std::endl;
-        //std::cout << UElist[i].Get_Associated_AP() << std::endl;
-    }
-    std::cout << cnt << " " << total << std::endl;
+    std::cout << cnt << std::endl;
     std::cout << "============================" << std::endl;
 
     cnt += 1;
     Simulator::Schedule(Seconds(delta_t),&Do_algorithm);
 }
 
+void update_analysis_data() {
+    for (int ue_id = 0 ; ue_id < UElist.size() ; ue_id++)
+        UE_average_rate[ue_id] += UElist[ue_id].Get_Achievable_DataRate()/simulation_steps;
+
+    int rf_ue_count = 0, vlc_ue_count = 0;
+    for (int rf_ap_id = 0 ; rf_ap_id < RF_AP_Num ; rf_ap_id++)
+        rf_ue_count += APlist[rf_ap_id].Associated_UE_Num();
+
+    for (int vlc_ap_id = RF_AP_Num ; vlc_ap_id < AP_Num ; vlc_ap_id++)
+        vlc_ue_count += APlist[vlc_ap_id].Associated_UE_Num();
+
+    UE_connect_to_RF_AP += rf_ue_count;
+    UE_connect_to_VLC_AP += vlc_ue_count;
+    UE_connect_to_AP += (rf_ue_count + vlc_ue_count);
+    Redundant_UE_count += (UE_Num - (rf_ue_count + vlc_ue_count));
+}
+
+void print_analysis_data() {
+    double average_ue_number_connect_to_RF_AP = (double)UE_connect_to_RF_AP / simulation_steps;
+    std::cout << "Average number of UE connect to RF AP: " << average_ue_number_connect_to_RF_AP << std::endl;
+
+    double average_ue_number_connect_to_VLC_AP = (double)UE_connect_to_VLC_AP / simulation_steps;
+    std::cout << "Average number of UE connect to VLC AP: " << average_ue_number_connect_to_VLC_AP << std::endl;
+
+    double average_ue_number_connect_to_AP = (double)UE_connect_to_AP / simulation_steps;
+    std::cout << "Average number of UE connect to AP: " << average_ue_number_connect_to_AP << std::endl;
+
+    double average_number_redundant = (double)Redundant_UE_count / simulation_steps;
+    std::cout << "Average number of redundant UE: " << average_number_redundant << std::endl;
+
+    double average_ue_achievable_data_rate = 0.0, average_ue_required_data_rate = 0.0;
+    for (int ue_id = 0 ; ue_id < UE_Num ; ue_id++) {
+        average_ue_achievable_data_rate += UE_average_rate[ue_id];
+        average_ue_required_data_rate += UElist[ue_id].Get_Required_DataRate();
+    }
+
+    average_ue_achievable_data_rate = average_ue_achievable_data_rate / UE_Num;
+    average_ue_required_data_rate = average_ue_required_data_rate / UE_Num;
+    std::cout << "Average achievable data rate of UE: " << average_ue_achievable_data_rate << std::endl;
+    std::cout << "Average required data rate of UE: " << average_ue_required_data_rate << std::endl;
+
+    //=======handover=======
+
+    std::cout << "Number of VHO: " << VHO_count << std::endl;
+    std::cout << "Number of RF to VLC: " << RFtoVLC << std::endl;
+    std::cout << "Number of VLC to RF: " << VLCtoRF << std::endl;
+    std::cout << "Number of HHO: " << HHO_count << std::endl;
+    std::cout << "Number of VLC to VLC: " << VLCtoVLC << std::endl;
+    std::cout << "Number of RF to RF: " << RFtoRF << std::endl;
+}
