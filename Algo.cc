@@ -21,7 +21,7 @@ std::vector<double> BER_required_SINR(number_of_layer+1,0.0);
 std::vector<std::vector<double>> Channel_Gain_Matrix(AP_Num,std::vector<double> (UE_Num,0));
 
 //frequency reuse
-std::vector<int> frequency (VLC_AP_Num,0);
+std::vector<int> frequency (AP_Num,0);
 
 //dwell time timer
 std::vector<double> Dwell_timer (UE_Num, 0.0);
@@ -112,10 +112,9 @@ void Initialize_AP_Node_list(NodeContainer & AP_Nodes){
             APlist.push_back(AP_Node(i, VLC_Max_Power, pos, AP_Nodes.Get(i)));
     }
 
-    //frequency reuse setting
-    frequency[1]=frequency[7]=frequency[9]=frequency[15]=1;
-    frequency[2]=frequency[4]=frequency[10]=frequency[12]=2;
-    frequency[3]=frequency[5]=frequency[11]=frequency[13]=3;
+    // frequency reuse setting
+    frequency[5]=frequency[7]=frequency[8]=frequency[10]=1;
+    frequency[13]=frequency[15]=frequency[16]=frequency[18]=1;
 }
 
 void Update_UE_Condiction() {
@@ -194,30 +193,24 @@ void Set_UE_default_modulation_mode() {
 double get_layer_required_power(const int ap_id, const int ue_id,
                           const int mod, const int layer,
                           const double sum_prev_ue_power){
-    /* SINR of this layer = single layer SINR using BPSK*/
+    // SINR of this layer = single layer SINR using BPSK
     double SINR = BER_required_SINR[mod]; // REMEMBER ARRAY STARTS AT 0!!
-    /* beta_l (subcarrier ratio) of this layer */
+    // beta_l (subcarrier ratio) of this layer
     double beta_l = (double) 1 / std::pow(2, layer);
-    /* interference from prev UEs (1 to k-1) */
+    // interference from prev UEs (1 to k-1)
     double intra_I = sum_prev_ue_power * std::pow(Channel_Gain_Matrix[ap_id][ue_id], 2);
-    /* AWGN */
-    // double AWGN = g_total_bandwidth * g_N_0;
+    // AWGN = VLC_bandwidth * N_0;
     double AWGN = bandwidth_per_cell * VLC_AWGN_spectral_density;
-    /* inter-cell-interference I_n,k */
+    // inter-cell-interference I_n,k
     double ICI = 0.0;
-    /*for(int ap_b_id = 0; ap_b_id < VLC_AP_Num; ap_b_id++) {
-        if (ap_b_id == ap_id) continue;
-        else {
-            check if same RB
-            int ap_rb_id = Room::transmitter_[ap_id]->get_rb_id();
-            int ap_b_rb_id = Room::transmitter_[ap_b_id]->get_rb_id();
-            if (ap_rb_id == ap_b_rb_id) /* ICI ONLY if use same RB
-                ICI += Room::transmitter_[ap_b_id]->get_ICI(ue_id);
+    for(int adj_ap_id = RF_AP_Num ; adj_ap_id < AP_Num ; adj_ap_id++) {
+        if (frequency[adj_ap_id] == frequency[ap_id] && ap_id != adj_ap_id) {
+            ICI += pow(Channel_Gain_Matrix[adj_ap_id][ue_id], 2) * 10.0;
         }
-    }*/
+    }
 
-    /* power for this layer */
-    double power = SINR * beta_l * (intra_I + AWGN + ICI) / std::pow(Channel_Gain_Matrix[ap_id][ue_id],2);
+    // power for this layer
+    double power = SINR * beta_l * (intra_I + AWGN + ICI) / pow(Channel_Gain_Matrix[ap_id][ue_id],2);
 
     return power;
 }
@@ -560,15 +553,15 @@ void Do_algorithm(){
 
     Update_UE_Condiction();
 
-    /*UElist[0].SetPosition(-3.75, 3.75);
+    UElist[0].SetPosition(-3.75, 3.75);
     UElist[0].Set_Required_DataRate(75.0);
     UElist[1].SetPosition(-3.6, 3.6);
     UElist[1].Set_Required_DataRate(75.0);
     UElist[2].SetPosition(-3.45, 3.45);
-    UElist[2].Set_Required_DataRate(75);
+    UElist[2].Set_Required_DataRate(75.0);
     UElist[3].SetPosition(-3.3, 3.3);
     UElist[3].Set_Required_DataRate(75.0);
-    Set_UE_default_modulation_mode();*/
+    Set_UE_default_modulation_mode();
 
     // 算所有 UE 的 Channel gain
     Calculate_Channel_Gain_Matrix(APlist, UElist, Channel_Gain_Matrix);
@@ -577,7 +570,7 @@ void Do_algorithm(){
 
     // std::cout << RF_AP_Bandwidth * RF_AWGN_spectral_density << std::endl;
 
-    /*std::cout << UElist[0].Get_Required_DataRate()<< std::endl;
+    std::cout << UElist[0].Get_Required_DataRate()<< std::endl;
     std::vector<int> v1 = UElist[0].Get_Modulation_Mod();
     std::cout << v1[0] << v1[1] << v1[2] << v1[3] << std::endl;
     std::cout << UElist[1].Get_Required_DataRate()<< std::endl;
@@ -596,8 +589,8 @@ void Do_algorithm(){
     APlist[4].Add_Associated_UE(1, 0.0);
     UElist[2].Set_Associated_AP(4);
     APlist[4].Add_Associated_UE(2, 0.0);
-    //UElist[3].Set_Associated_AP(4);
-    //APlist[4].Add_Associated_UE(3, 0.0);
+    UElist[3].Set_Associated_AP(4);
+    APlist[4].Add_Associated_UE(3, 0.0);
 
     Update_VLC_AP_power_allocation(4);
 
@@ -610,10 +603,11 @@ void Do_algorithm(){
     std::cout << "UE id 1 " << Channel_Gain_Matrix[4][1] << " " << UElist[1].Get_Achievable_DataRate() << std::endl;
     std::cout << "UE id 2 " << Channel_Gain_Matrix[4][2] << " " << UElist[2].Get_Achievable_DataRate() << std::endl;
     std::cout << "UE id 3 " << Channel_Gain_Matrix[4][3] << " " << UElist[3].Get_Achievable_DataRate() << std::endl;
-    std::cout << "UE residual power " << APlist[4].Get_Residual_Power() << std::endl;
-    std::cout << "UE residual power " << power_allocation_after_handover(4, 3)[1] << std::endl;*/
+    std::cout << "AP release power " << VLC_Max_Power-APlist[4].Get_Residual_Power() << std::endl;
+    std::cout << "AP residual power " << APlist[4].Get_Residual_Power() << std::endl;
+    //std::cout << "UE residual power " << power_allocation_after_handover(4, 3)[1] << std::endl;
 
-    if(Simulator::Now().GetSeconds() == 0) { // 初始化環境，UE 根據 channel gain 由大到小排序，採 SSS
+    /*if(Simulator::Now().GetSeconds() == 0) { // 初始化環境，UE 根據 channel gain 由大到小排序，採 SSS
         Set_UE_default_modulation_mode();
         Set_UE_Associated_AP_Based_On_Channel();
 
@@ -971,7 +965,7 @@ void Do_algorithm(){
     std::cout << "============================" << std::endl;
 
     cnt += 1;
-    Simulator::Schedule(Seconds(delta_t),&Do_algorithm);
+    Simulator::Schedule(Seconds(delta_t),&Do_algorithm);*/
 }
 
 void update_analysis_data() {

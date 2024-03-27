@@ -15,7 +15,7 @@ const double pi = 3.14159265359;
 /////////        Simulation Constants          /////////
 ////////////////////////////////////////////////////////
 //simulation time, unit: seconds
-const int simulation_time = 300.0; // 300
+const int simulation_time = 300; // 300
 
 //time between each execution of the algorithm, unit: seconds
 const double delta_t = 0.05;
@@ -68,7 +68,7 @@ const int VLC_AP_Num = 16;
 const int AP_Num = RF_AP_Num + VLC_AP_Num;
 
 // - UE number
-const int UE_Num = 20;
+const int UE_Num = 4;
 
 // VLC AP y axis start
 const double VLC_AP_Y = 3.75;
@@ -77,7 +77,7 @@ const double VLC_AP_Y = 3.75;
 const double VLC_AP_X = 3.75;
 
 // VLC AP SPACE
-const double VLC_AP_SPACE = 1.25;
+const double VLC_AP_SPACE = 2.5;
 
 // RF AP y axis start
 const double RF_AP_Y = 2.5;
@@ -159,7 +159,7 @@ const double max_required_rate = 150;//Mbps
 ////////////////////////////////////////////////////////
 
 // semi-angle of FOV
-const double VLC_field_of_view = 50;
+const double VLC_field_of_view = 45;
 
 // semi-angle at half-illumination (phi_1/2) 60
 const int VLC_PHI_half = 60;

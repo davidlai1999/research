@@ -92,7 +92,7 @@ double Estimate_one_VLC_Channel_Gain(AP_Node ap, UE_Node ue){
         return 0.0;
 
     //lambertian raidation coefficient m = -ln2 / ln(cos(Φ1/2))
-    const double lambertian_coefficient = (-1) / (log(cos(DegToRad(VLC_PHI_half))));    //cos只吃弧度,所以要轉
+    const double lambertian_coefficient = (-1) / (log2(cos(DegToRad(VLC_PHI_half))));    //cos只吃弧度,所以要轉
 
     const double irradiance_angle = incidence_angle;
 
@@ -112,7 +112,7 @@ double Estimate_one_VLC_Channel_Gain(AP_Node ap, UE_Node ue){
 
     channel_gain *= VLC_filter_gain; // third  term
 
-    channel_gain *= pow(VLC_refractive_index , 2) / pow( sin(DegToRad(VLC_field_of_view)) , 2); // fourth term
+    channel_gain *= pow(VLC_refractive_index , 2) / pow(sin(DegToRad(VLC_field_of_view)) , 2); // fourth term
 
     channel_gain *= cos(incidence_angle); // last term
 
@@ -128,40 +128,23 @@ double Estimate_one_VLC_Channel_Gain2(AP_Node ap, UE_Node ue) {
     }
 
     // TODO (alex#2#): alpha should be global constant to reduce computation.
-    const double alpha = abs(log(2) / (log(cos(DegToRad(VLC_PHI_half)))));
-    const double irradiance_angle = incidence_angle;
-    const double distance = GetDistance_AP_UE(ap, ue);
-    double channel = (alpha + 1) * VLC_receiver_area / (2 * pi * pow(distance, 2)); // first term
+    const double lambertian_coefficient = -(log2(2) / (log2(cos(DegToRad(VLC_PHI_half))))); //cos只吃弧度,所以要轉;
 
-    channel = channel * pow(cos(irradiance_angle), alpha); // second term
+    const double irradiance_angle = incidence_angle;
+
+    const double distance = GetDistance_AP_UE(ap, ue);
+    //if (ap.GetID() == 9 && ue.GetID() == 0)
+        //std::cout << distance <<std::endl;
+
+    double channel = (lambertian_coefficient + 1) * VLC_receiver_area / (2 * pi * pow(distance, 2)); // first term
+
+    channel = channel * pow(cos(irradiance_angle), lambertian_coefficient); // second term
 
     channel = channel * VLC_filter_gain * VLC_concentrator_gain; // third and fourth term
 
     channel = channel * cos(incidence_angle); // last term
+
     return channel;
-}
-
-//計算某個 pair(AP,UE)在3維空間的距離
-double GetDistance_AP_UE(Ptr<Node> AP ,Ptr<Node> UE){
-
-    //取得AP的位置
-    Ptr<MobilityModel> AP_MobilityModel = AP->GetObject<MobilityModel> ();
-    Vector AP_Pos = AP_MobilityModel->GetPosition();
-
-    //取得UE的位置
-    Ptr<MobilityModel> UE_MobilityModel = UE->GetObject<MobilityModel> ();
-    Vector UE_Pos = UE_MobilityModel->GetPosition();
-
-    //高度差 h
-    const double height_diff = AP_Pos.z - UE_Pos.z;
-
-    //xy在平面上的距離 p
-    double dx = AP_Pos.x - UE_Pos.x;
-    double dy = AP_Pos.y - UE_Pos.y;
-    const double plane_diff = sqrt(pow(dx,2)+pow(dy,2));
-
-    //歐基米德距離
-    return sqrt(pow(height_diff,2)+pow(plane_diff,2));
 }
 
 double GetDistance_AP_UE(AP_Node ap, UE_Node ue){
@@ -178,6 +161,7 @@ double GetDistance_AP_UE(AP_Node ap, UE_Node ue){
     //xy在平面上的距離 p
     double dx = AP_Pos.x - UE_Pos.x;
     double dy = AP_Pos.y - UE_Pos.y;
+
     const double plane_diff = sqrt(pow(dx,2)+pow(dy,2));
 
     //歐基米德距離
